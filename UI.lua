@@ -82,7 +82,7 @@
 
     local themes = {
         preset = {
-            accent = rgb(155, 150, 219),
+            accent = rgb(255, 60, 60),
         }, 
 
         utility = {
@@ -533,7 +533,17 @@
         end 
 
         function library:apply_theme(instance, theme, property) 
-            insert(themes.utility[theme][property], instance)
+            local theme_bucket = themes.utility[theme]
+            if not theme_bucket then
+                return
+            end
+
+            local property_bucket = theme_bucket[property]
+            if not property_bucket then
+                return
+            end
+
+            insert(property_bucket, instance)
         end
 
         function library:update_theme(theme, color)
@@ -869,7 +879,8 @@
                 
                 items[ "main" ].Visible = bool
                 if items[ "mobile_toggle" ] then
-                    items[ "mobile_toggle" ].Text = bool and "Close" or "Open"
+                    -- Keep label fixed; use subtle visual state instead.
+                    items[ "mobile_toggle" ].BackgroundTransparency = bool and 0.05 or 0.15
                 end
                 if not bool then
                     library:close_element()
@@ -888,36 +899,118 @@
                     });
                 end
 
-                items[ "mobile_toggle" ] = library:create( "TextButton" , {
+                -- IRONIC.CC styled mobile toggle (fixed red outline + dark fill)
+                local ironic_red = rgb(255, 60, 60)
+                local ironic_text = "<i>IRONIC.CC</i>"
+
+                local function start_fire_effect(label)
+                    local gradient = Instance.new("UIGradient")
+                    gradient.Color = rgbseq{
+                        rgbkey(0.00, rgb(120, 0, 0)),
+                        rgbkey(0.18, rgb(255, 30, 30)),
+                        rgbkey(0.45, rgb(255, 140, 0)),
+                        rgbkey(0.70, rgb(255, 220, 80)),
+                        rgbkey(0.88, rgb(255, 70, 20)),
+                        rgbkey(1.00, rgb(160, 0, 0))
+                    }
+                    gradient.Rotation = 90
+                    gradient.Parent = label
+
+                    local start_t = os.clock()
+                    library:connection(run.RenderStepped, function()
+                        if not label or not label.Parent then
+                            return
+                        end
+
+                        local t = os.clock() - start_t
+                        local y = -((t * 0.75) % 1)
+                        local wobble = sin(t * 6) * 0.08
+                        gradient.Offset = vec2(0, y + wobble)
+                        gradient.Rotation = 90 + sin(t * 4) * 8
+                    end)
+
+                    return gradient
+                end
+                items[ "mobile_toggle_outline" ] = library:create( "Frame" , {
                     Parent = library[ "mobile" ];
                     Name = "\0";
-                    Text = items[ "main" ].Visible and "Close" or "Open";
-                    AutoButtonColor = false;
                     AnchorPoint = vec2(1, 1);
                     Position = dim2(1, -18, 1, -18);
-                    Size = dim2(0, 120, 0, 38);
+                    Size = dim2(0, 170, 0, 46);
                     BorderSizePixel = 0;
-                    TextSize = 16;
-                    FontFace = fonts.font;
-                    TextColor3 = rgb(245, 245, 245);
-                    BackgroundColor3 = rgb(33, 33, 35);
+                    BackgroundColor3 = ironic_red;
+                });
+
+                library:create( "UICorner" , {
+                    Parent = items[ "mobile_toggle_outline" ];
+                    CornerRadius = dim(0, 10)
+                });
+
+                items[ "mobile_toggle" ] = library:create( "TextButton" , {
+                    Parent = items[ "mobile_toggle_outline" ];
+                    Name = "\0";
+                    Text = "";
+                    AutoButtonColor = false;
+                    AnchorPoint = vec2(0.5, 0.5);
+                    Position = dim2(0.5, 0, 0.5, 0);
+                    Size = dim2(1, -4, 1, -4);
+                    BorderSizePixel = 0;
+                    BackgroundTransparency = items[ "main" ].Visible and 0.05 or 0.15;
+                    BackgroundColor3 = rgb(14, 14, 16);
                 });
 
                 library:create( "UICorner" , {
                     Parent = items[ "mobile_toggle" ];
-                    CornerRadius = dim(0, 6)
+                    CornerRadius = dim(0, 9)
                 });
 
                 library:create( "UIStroke" , {
                     Parent = items[ "mobile_toggle" ];
-                    Color = rgb(23, 23, 29);
+                    Color = ironic_red;
                     ApplyStrokeMode = Enum.ApplyStrokeMode.Border
                 });
+
+                -- Text glow effect (layered labels)
+                items[ "mobile_text_glow" ] = library:create( "TextLabel" , {
+                    Parent = items[ "mobile_toggle" ];
+                    Name = "\0";
+                    BackgroundTransparency = 1;
+                    AnchorPoint = vec2(0.5, 0.5);
+                    Position = dim2(0.5, 0, 0.5, 1);
+                    Size = dim2(1, 0, 1, 0);
+                    BorderSizePixel = 0;
+                    RichText = true;
+                    Text = ironic_text;
+                    TextSize = 22;
+                    FontFace = fonts.font;
+                    TextColor3 = ironic_red;
+                    TextTransparency = 0.45;
+                    TextStrokeTransparency = 1;
+                });
+                start_fire_effect(items[ "mobile_text_glow" ])
+
+                items[ "mobile_text" ] = library:create( "TextLabel" , {
+                    Parent = items[ "mobile_toggle" ];
+                    Name = "\0";
+                    BackgroundTransparency = 1;
+                    AnchorPoint = vec2(0.5, 0.5);
+                    Position = dim2(0.5, 0, 0.5, 0);
+                    Size = dim2(1, 0, 1, 0);
+                    BorderSizePixel = 0;
+                    RichText = true;
+                    Text = ironic_text;
+                    TextSize = 22;
+                    FontFace = fonts.font;
+                    TextColor3 = ironic_red;
+                    TextTransparency = 0;
+                    TextStrokeColor3 = rgb(120, 0, 0);
+                    TextStrokeTransparency = 0.15;
+                });
+                start_fire_effect(items[ "mobile_text" ])
 
                 library:bind_activation(items[ "mobile_toggle" ], function()
                     local new_state = not items[ "main" ].Visible
                     cfg.toggle_menu(new_state)
-                    items[ "mobile_toggle" ].Text = new_state and "Close" or "Open"
                 end)
             end
                 
