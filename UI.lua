@@ -414,25 +414,13 @@
 
             library:connection(uis.InputChanged, function(input, game_event) 
                 if dragging and ((active_type == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseMovement) or (active_type == Enum.UserInputType.Touch and input.UserInputType == Enum.UserInputType.Touch)) then
-                    local viewport_x = camera.ViewportSize.X
-                    local viewport_y = camera.ViewportSize.Y
-
                     local pos = input_position(input)
-                    local abs = frame.AbsoluteSize
 
                     local current_position = dim2(
-                        0,
-                        clamp(
-                            start_size.X.Offset + (pos.X - start.X),
-                            0,
-                            viewport_x - abs.X
-                        ),
-                        0,
-                        math.clamp(
-                            start_size.Y.Offset + (pos.Y - start.Y),
-                            0,
-                            viewport_y - abs.Y
-                        )
+                        start_size.X.Scale,
+                        start_size.X.Offset + (pos.X - start.X),
+                        start_size.Y.Scale,
+                        start_size.Y.Offset + (pos.Y - start.Y)
                     )
 
                     library:tween(frame, {Position = current_position}, Enum.EasingStyle.Linear, 0.05)
