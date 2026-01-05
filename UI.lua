@@ -887,8 +887,15 @@
                 end
             end 
 
-            -- Touch devices get a persistent open/close button.
-            if uis.TouchEnabled then
+            -- Mobile/tablet devices get a persistent, movable open/close button.
+            -- Show on iOS/Android and on other touch-only devices; hide on typical PCs (mouse/keyboard).
+            local platform = uis.GetPlatform and uis:GetPlatform() or nil
+            local show_mobile_button = uis.TouchEnabled and (
+                platform == Enum.Platform.Android
+                or platform == Enum.Platform.IOS
+                or (not uis.MouseEnabled and not uis.KeyboardEnabled)
+            )
+            if show_mobile_button then
                 if not library[ "mobile" ] then
                     library[ "mobile" ] = library:create( "ScreenGui" , {
                         Parent = coregui;
@@ -934,8 +941,8 @@
                 items[ "mobile_toggle_outline" ] = library:create( "Frame" , {
                     Parent = library[ "mobile" ];
                     Name = "\0";
-                    AnchorPoint = vec2(1, 1);
-                    Position = dim2(1, -18, 1, -18);
+                    AnchorPoint = vec2(0, 0);
+                    Position = dim_offset((camera.ViewportSize.X - 18) - 170, 18);
                     Size = dim2(0, 170, 0, 46);
                     BorderSizePixel = 0;
                     BackgroundColor3 = ironic_red;
@@ -1008,10 +1015,127 @@
                 });
                 start_fire_effect(items[ "mobile_text" ])
 
-                library:bind_activation(items[ "mobile_toggle" ], function()
-                    local new_state = not items[ "main" ].Visible
-                    cfg.toggle_menu(new_state)
+                -- Tap toggles the menu; drag moves the button.
+                -- On touch, InputChanged/InputEnded may not return the same InputObject instance,
+                -- so we match touches by TouchId.
+                local dragging_btn = false
+                local drag_start
+                local start_pos
+                local active_input
+
+                local function safe_user_input_type(input)
+                    local ok, t = pcall(function()
+                        return input.UserInputType
+                    end)
+                    if ok then
+                        return t
+                    end
+                    return nil
+                end
+
+                local function safe_touch_id(input)
+                    local ok, tid = pcall(function()
+                        return input.TouchId
+                    end)
+                    if ok then
+                        return tid
+                    end
+                    return nil
+                end
+
+                local function same_pointer(a, b)
+                    if not a or not b then
+                        return false
+                    end
+
+                    local ta = safe_user_input_type(a)
+                    local tb = safe_user_input_type(b)
+                    if ta == nil or tb == nil or ta ~= tb then
+                        return false
+                    end
+
+                    if ta == Enum.UserInputType.Touch then
+                        local ida = safe_touch_id(a)
+                        local idb = safe_touch_id(b)
+                        if ida ~= nil and idb ~= nil then
+                            return ida == idb
+                        end
+                    end
+
+                    return a == b
+                end
+
+                local function clamp_button_to_screen()
+                    local vp = camera.ViewportSize
+                    local pos = items[ "mobile_toggle_outline" ].Position
+                    local x = clamp(pos.X.Offset, 8, vp.X - items[ "mobile_toggle_outline" ].AbsoluteSize.X - 8)
+                    local y = clamp(pos.Y.Offset, 8, vp.Y - items[ "mobile_toggle_outline" ].AbsoluteSize.Y - 8)
+                    items[ "mobile_toggle_outline" ].Position = dim_offset(x, y)
+                end
+
+                local function begin_mobile_drag(input)
+                    if not is_primary_press(input) then
+                        return
+                    end
+
+                    if not items[ "mobile_toggle_outline" ] then
+                        return
+                    end
+
+                    active_input = input
+                    dragging_btn = false
+                    drag_start = input_position(input)
+                    start_pos = items[ "mobile_toggle_outline" ].Position
+                end
+
+                items[ "mobile_toggle_outline" ].InputBegan:Connect(begin_mobile_drag)
+                items[ "mobile_toggle" ].InputBegan:Connect(begin_mobile_drag)
+
+                library:connection(uis.InputChanged, function(input)
+                    if not active_input or not same_pointer(input, active_input) then
+                        return
+                    end
+                    if not is_pointer_move(input) then
+                        return
+                    end
+
+                    if not drag_start or not start_pos or not items[ "mobile_toggle_outline" ] then
+                        return
+                    end
+
+                    local pos = input_position(input)
+                    local dx = pos.X - drag_start.X
+                    local dy = pos.Y - drag_start.Y
+
+                    if not dragging_btn then
+                        if (abs(dx) + abs(dy)) > 8 then
+                            dragging_btn = true
+                        end
+                    end
+
+                    if dragging_btn then
+                        items[ "mobile_toggle_outline" ].Position = dim_offset(start_pos.X.Offset + dx, start_pos.Y.Offset + dy)
+                        clamp_button_to_screen()
+                    end
                 end)
+
+                library:connection(uis.InputEnded, function(input)
+                    if not active_input or not same_pointer(input, active_input) then
+                        return
+                    end
+
+                    if not dragging_btn then
+                        if items[ "main" ] then
+                            local new_state = not items[ "main" ].Visible
+                            cfg.toggle_menu(new_state)
+                        end
+                    end
+
+                    active_input = nil
+                    dragging_btn = false
+                end)
+
+                library:connection(camera:GetPropertyChangedSignal("ViewportSize"), clamp_button_to_screen)
             end
                 
             return setmetatable(cfg, library)
